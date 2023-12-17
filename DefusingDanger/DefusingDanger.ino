@@ -45,8 +45,6 @@ const byte specialBombBlinkInterval = 100;
 unsigned long lastSpecialBombBlinked = 0;
 bool specialBombActive = true;
 
-// byte matrix[matrixSize][matrixSize] = {};
-
 byte matrix[matrixSize][matrixSize] = {
   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 },
   { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
@@ -104,6 +102,7 @@ enum GameState {
   ADJUST_LCD_BRIGHTNESS,
   ADJUST_MATRIX_BRIGHTNESS,
   ADJUST_PLAYER_NAME,
+  ADJUST_DIFFICULTY,
   HIGHSCORE,
   ABOUT,
   END_MESSAGE
@@ -114,6 +113,7 @@ GameState gameState = WELCOME;
 int selectedOption = 0;
 int generated = 0;
 int score = 0;
+byte currentDifficulty = 0;
 
 const int nameLength = 8;                   // Maximum length of the name
 char playerName[nameLength + 1] = "     ";  // Initialize with spaces
@@ -131,7 +131,9 @@ const int EEPROM_HIGHSCORE_START_ADDR = 100;  // Starting address for highscores
 
 Highscore highscores[maxHighscores];
 
+bool win;
 unsigned long gameStartTime;
+const unsigned long gameDuration = 60000;
 unsigned long introMessageStartTime;
 
 bool printed = false;
@@ -227,16 +229,17 @@ void swap(Highscore& a, Highscore& b) {
 }
 
 void updateHighscores(const char* playerName, unsigned long playerScore) {
+  Serial.print(score);
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
   // Find the right position to insert the new score
   int position = 0;
   for (position = 0; position < maxHighscores; ++position) {
-    if (playerScore > highscores[position].score && highscores[position].score != 0) {
+    if (playerScore < highscores[position].score) {
       break;
     }
   }
 
-  if (playerScore < highscores[0].score || highscores[0].score == 0) {
+  if (playerScore > highscores[0].score) {
     int length = sizeof(playerName);
     swap(highscores[0], highscores[1]);
     strcpy(highscores[0].name, playerName);
@@ -285,6 +288,9 @@ void handleMenu() {
     case SETTINGS:
       adjustSettings();
       break;
+    case ADJUST_DIFFICULTY:
+      adjustDifficulty();
+      break;
     case ADJUST_LCD_BRIGHTNESS:
       adjustLCDBrightness();
       break;
@@ -298,7 +304,7 @@ void handleMenu() {
       displayAbout();
       break;
     case END_MESSAGE:
-      displayEndMessage();
+      displayEndMessage(win);
     default:
       break;
   }
@@ -365,6 +371,39 @@ void adjustSettings() {
     }
   }
 }
+
+void adjustDifficulty() {
+  lcd.setCursor(0, 0);
+  lcd.print("Difficulty:    ");
+  lcd.setCursor(0, 1);
+
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+  JoystickDirection direction = determineJoystickMovement(xValue, yValue);
+
+  if (direction == DOWN) {
+    currentDifficulty = (currentDifficulty + 1) % 3;
+  } else if (direction == UP) {
+    currentDifficulty = (currentDifficulty + 3 - 1) % 3;
+  }
+
+  switch (currentDifficulty) {
+    case 0:
+      lcd.print("Easy   ");
+      break;
+    case 1:
+      lcd.print("Medium ");
+      break;
+    case 2:
+      lcd.print("Hard   ");
+      break;
+  }
+
+  if (isJoystickButtonDebounced() && buttonState == LOW) {
+    changeGameState(MENU);
+  }
+}
+
 
 
 void displayAbout() {
@@ -520,9 +559,9 @@ void menuOption() {
 
 
   if (direction == DOWN) {
-    selectedOption = (selectedOption + 1) % 4;
+    selectedOption = (selectedOption + 1) % 5;
   } else if (direction == UP) {
-    selectedOption = (selectedOption - 1 + 4) % 4;
+    selectedOption = (selectedOption - 1 + 5) % 5;
   }
 
   lcd.setCursor(0, 1);
@@ -537,6 +576,8 @@ void menuOption() {
     lcd.print("About");
   } else if (selectedOption == 3) {
     lcd.print("Highscore");
+  } else if (selectedOption == 4) {
+    lcd.print("Difficulty:    ");
   }
 
   if (isJoystickButtonDebounced()) {
@@ -557,31 +598,54 @@ void menuOption() {
         lcd.clear();
         selectedOption = 0;
         changeGameState(HIGHSCORE);
+      } else if (selectedOption == 4) {
+        lcd.clear();
+        selectedOption = 0;
+        changeGameState(ADJUST_DIFFICULTY);
+        selectedOption = 0;
       }
     }
   }
   gameStartTime = millis();
 }
 
+void displayEndMessage(bool win) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  if (win) {
+    lcd.print("Congratulations");
+    lcd.setCursor(0, 1);
+    lcd.print("YOU WIN!");
+  } else {
+    lcd.print("Game Over");
+    lcd.setCursor(0, 1);
+    lcd.print("FAIL");
+  }
 
-void displayEndMessage() {
-  lcd.print("Congratulations");
-  lcd.setCursor(0, 1);
-  lcd.print("YOU WIN!");
-  unsigned long startTime = millis();
-  unsigned long duration = 5000;
+  delay(5000);            // Display the message for 5 seconds
+  changeGameState(MENU);  // Return to the main menu
+}
 
-  while (millis() - startTime < duration) {}
 
-  changeGameState(MENU);
+void resetGame() {
+  gameOver = false;
+  win = false;
+  generated = 0;
+  score = 0;
+  xPos = 1;
+  yPos = 1;
+  xLastPos = 0;
+  yLastPos = 0;
+  bombPlanted = false;
+  specialBombActive = true;
+  gameStartTime = millis();  // Reset the game start time
 }
 
 void startGame() {
   if (gameOver) {
-    unsigned long endTime = millis();
-    score = (endTime - gameStartTime) / 1000;
-    updateHighscores(playerName, score);
-    changeGameState(END_MESSAGE);
+    // unsigned long endTime = millis();
+    // score = (endTime - gameStartTime) / 1000;
+    // updateHighscores(playerName, score);
     return;
   }
 
@@ -595,12 +659,22 @@ void startGame() {
 }
 
 void updateGameDisplay() {
+  unsigned long currentTime = millis();
+  unsigned long elapsedTime = currentTime - gameStartTime;
+  unsigned long remainingTime = (gameDuration > elapsedTime) ? (gameDuration - elapsedTime) : 0;
   if (!bombDefusalInitiated) {
     lcd.clear();
-    lcd.print("Time : ");
-    lcd.setCursor(7, 0);
-    lcd.print((millis() - gameStartTime) / 1000);
     lcd.setCursor(0, 0);
+    lcd.print("Name: ");
+    lcd.print(playerName);
+    lcd.setCursor(0, 1);
+    lcd.print("Time: ");
+    lcd.print(remainingTime / 1000);
+
+    if (remainingTime == 0) {
+      gameOver = true;
+      changeGameState(END_MESSAGE);
+    }
   } else {
     showDefusingCountdown();
   }
@@ -673,17 +747,29 @@ void showDefusingCountdown() {
 
   if (buttonPressDuration >= 5000) {
     defuseBomb();
-    bombDefusalInitiated = false; 
+    bombDefusalInitiated = false;
   }
 }
 
 
 void generateMap() {
   matrix[xPos][yPos] = 1;
+  int wallProbability = 0;
+  switch (currentDifficulty) {
+    case 0:
+      wallProbability = 25;
+      break;
+    case 1:
+      wallProbability = 50;
+      break;
+    case 2:
+      wallProbability = 75;
+      break;
+  }
   for (int i = 1; i < matrixSize - 1; i++) {
     for (int j = 1; j < matrixSize - 1; j++) {
       // Check if the current position is not around the player
-      if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && matrix[i][j] != 4 && random(2) && matrix[i][j] != 5) {
+      if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && matrix[i][j] != 4 && random(100) < wallProbability && matrix[i][j] != 5) {
         // Place a wall
         matrix[i][j] = 3;
       }
@@ -718,30 +804,21 @@ void updatePositions() {
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   switch (direction) {
-    case UP:  
+    case UP:
       newXPos = max(xPos - 1, 0);
       break;
-    case DOWN:  
+    case DOWN:
       newXPos = min(xPos + 1, matrixSize - 1);
       break;
-    case LEFT:  
+    case LEFT:
       newYPos = max(yPos - 1, 0);
       break;
-    case RIGHT: 
+    case RIGHT:
       newYPos = min(yPos + 1, matrixSize - 1);
       break;
     case CENTERED:
       break;
   }
-
-  Serial.print(xLastPos);
-  Serial.print(" ");
-  Serial.print(yLastPos);
-  Serial.print(" ");
-  Serial.print(newXPos);
-  Serial.print(" ");
-  Serial.print(newYPos);
-  Serial.println();
 
   // Check if the new position is a wall or door
   if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4) {
@@ -781,12 +858,18 @@ void defuseBomb() {
   specialBombActive = false;
   matrix[bombXPos][bombYPos] = 0;
   gameOver = true;
+
   for (int row = 0; row < matrixSize; row++) {
     for (int col = 0; col < matrixSize; col++) {
       matrix[row][col] = 1;
     }
   }
   updateMatrix();
+  win = true;
+  unsigned long endTime = millis();
+  score = (gameDuration - (endTime - gameStartTime)) / 1000;
+  updateHighscores(playerName, score);
+  changeGameState(END_MESSAGE);
 }
 
 
