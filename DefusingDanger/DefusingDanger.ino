@@ -197,7 +197,7 @@ void setup() {
 
   pinMode(buttonPin, INPUT_PULLUP);
 
-  // initMatrix();
+  initMatrix();
 
   highscoreInit();
 
@@ -438,10 +438,9 @@ void displayAbout() {
 void initMatrix() {
   for (int row = 0; row < matrixSize; row++) {
     for (int col = 0; col < matrixSize; col++) {
-      matrix[row][col] = 1;
+      lc.setLed(0, row, col, true);
     }
   }
-  updateMatrix();
 }
 
 void adjustMatrixBrightness() {
@@ -583,7 +582,7 @@ void menuOption() {
   if (isJoystickButtonDebounced()) {
     if (buttonState == LOW) {
       if (selectedOption == 0) {
-        selectedOption = 0;
+        resetGame();
         lcd.clear();
         changeGameState(START_GAME);
       } else if (selectedOption == 1) {
@@ -610,6 +609,7 @@ void menuOption() {
 }
 
 void displayEndMessage(bool win) {
+  initMatrix();
   lcd.clear();
   lcd.setCursor(0, 0);
   if (win) {
@@ -639,6 +639,18 @@ void resetGame() {
   bombPlanted = false;
   specialBombActive = true;
   gameStartTime = millis();  // Reset the game start time
+
+  for (int row = 0; row < matrixSize; row++) {
+    for (int col = 0; col < matrixSize; col++) {
+      if (((row == 4 || row == 11) && (col == 7 || col == 8)) || ((row == 7 || row == 8) && (col == 3 || col == 11))) {
+        matrix[row][col] = 5;
+      } else if (row == 0 || row == 7 || row == 8 || row == matrixSize - 1 || col == 0 || col == 7 || col == 8 || col == matrixSize - 1) {
+        matrix[row][col] = 4;
+      } else {
+        matrix[row][col] = 0;
+      }
+    }
+  }
 }
 
 void startGame() {
@@ -859,12 +871,12 @@ void defuseBomb() {
   matrix[bombXPos][bombYPos] = 0;
   gameOver = true;
 
-  for (int row = 0; row < matrixSize; row++) {
-    for (int col = 0; col < matrixSize; col++) {
-      matrix[row][col] = 1;
-    }
-  }
-  updateMatrix();
+  // for (int row = 0; row < matrixSize; row++) {
+  //   for (int col = 0; col < matrixSize; col++) {
+  //     lc.setLed(0, row, col, true);
+  //   }
+  // }
+  //updateMatrix();
   win = true;
   unsigned long endTime = millis();
   score = (gameDuration - (endTime - gameStartTime)) / 1000;
