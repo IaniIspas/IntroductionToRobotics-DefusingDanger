@@ -15,8 +15,8 @@ byte LCDBrightness = 150;
 const int EEPROM_LCD_BRIGHTNESS_ADDR = 0;
 const int EEPROM_MATRIX_BRIGHTNESS_ADDR = 5;
 byte matrixBrightness = 2;
-byte xPos = 0;
-byte yPos = 0;
+byte xPos = 1;
+byte yPos = 1;
 byte xLastPos = 0;
 byte yLastPos = 0;
 
@@ -26,7 +26,7 @@ const int maxThreshold = 600;
 const byte moveInterval = 100;
 unsigned long lastMoved = 0;
 
-const byte matrixSize = 8;
+const byte matrixSize = 16;
 
 const byte playerBlinkInterval = 2000;
 unsigned long lastPlayerBlinked = 0;
@@ -39,13 +39,32 @@ const byte bombBlinkInterval = 100;
 unsigned long lastBombBlinked = 0;
 bool bombPlanted = false;
 
-byte specialBombXPos = 7;
-byte specialBombYPos = 7;
+byte specialBombXPos = 6;
+byte specialBombYPos = 6;
 const byte specialBombBlinkInterval = 100;
 unsigned long lastSpecialBombBlinked = 0;
 bool specialBombActive = true;
 
-byte matrix[matrixSize][matrixSize] = {};
+// byte matrix[matrixSize][matrixSize] = {};
+
+byte matrix[matrixSize][matrixSize] = {
+        {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4},
+        {4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
+        {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
+};
 
 bool buttonState = HIGH;
 bool lastButtonState = HIGH;
@@ -173,7 +192,7 @@ void setup() {
 
   pinMode(buttonPin, INPUT_PULLUP);
 
-  initMatrix();
+  // initMatrix();
 
   highscoreInit();
 
@@ -495,7 +514,7 @@ void adjustPlayerName() {
   if (isJoystickButtonDebounced() && buttonState == LOW) {
     playerName[charPosition] = currentChar;
     playerName[charPosition + 1] = '\0';  // Null-terminate the string
-    charPosition = 0;                 // Reset for next time
+    charPosition = 0;                     // Reset for next time
     changeGameState(MENU);
     //changeGameState(DEBUGG);
   }
@@ -683,16 +702,11 @@ void showDefusingCountdown() {
 
 
 void generateMap() {
-  for (int i = 0; i < matrixSize; i++) {
-    for (int j = 0; j < matrixSize; j++) {
-      matrix[i][j] = 0;
-    }
-  }
   matrix[xPos][yPos] = 1;
-  for (int i = 0; i < matrixSize; i++) {
-    for (int j = 0; j < matrixSize; j++) {
+  for (int i = 1; i < matrixSize - 1; i++) {
+    for (int j = 1; j < matrixSize - 1; j++) {
       // Check if the current position is not around the player
-      if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && random(2)) {
+      if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && matrix[i][j] != 4 && random(2) && matrix[i][j] != 5) {
         // Place a wall
         matrix[i][j] = 3;
       }
@@ -700,13 +714,116 @@ void generateMap() {
   }
 }
 
+// void generateMap() {
+  // Clear the matrix first
+  // for (int i = 0; i < matrixSize; i++) {
+  //   for (int j = 0; j < matrixSize; j++) {
+  //     matrix[i][j] = 0;
+  //   }
+  // }
+
+  // // Create walls to form four 8x8 rooms
+  // for (int i = 0; i < matrixSize; i++) {
+  //   for (int j = 0; j < matrixSize; j++) {
+  //     // Add vertical wall
+  //     if (i == matrixSize / 2) matrix[i][j] = 3;
+  //     // Add horizontal wall
+  //     if (j == matrixSize / 2) matrix[i][j] = 3;
+  //   }
+  // }
+
+  // //matrix[xPos][yPos] = 1;
+  // for (int i = 0; i < matrixSize; i++) {
+  //   for (int j = 0; j < matrixSize; j++) {
+  //     // Check if the current position is not around the player
+  //     if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && random(2)) {
+  //       // Place a wall
+  //       matrix[i][j] = 3;
+  //     }
+  //   }
+  // }
+
+  // // Create doors in the walls (adjust these positions as needed)
+  // matrix[matrixSize / 2][matrixSize / 4] = 0;      // Door on the left wall
+  // matrix[matrixSize / 2][3 * matrixSize / 4] = 0;  // Door on the right wall
+  // matrix[matrixSize / 4][matrixSize / 2] = 0;      // Door on the top wall
+  // matrix[3 * matrixSize / 4][matrixSize / 2] = 0;  // Door on the bottom wall
+
+  // // Place the player
+  // matrix[1][1] = 1;  // Adjust the player's starting position as needed
+
+  // Call updateMatrix() to reflect these changes
+//   updateMatrix();
+// }
+
+
+// void updateMatrix() {
+//   for (int row = 0; row < matrixSize; row++) {
+//     for (int col = 0; col < matrixSize; col++) {
+//       lc.setLed(0, row, col, matrix[row][col] > 0);
+//     }
+//   }
+// }
+
 void updateMatrix() {
-  for (int row = 0; row < matrixSize; row++) {
-    for (int col = 0; col < matrixSize; col++) {
-      lc.setLed(0, row, col, matrix[row][col] > 0);
+  byte startRow = (xPos / 8) * 8;
+  byte startCol = (yPos / 8) * 8;
+
+  for (int row = 0; row < 8; row++) {
+    for (int col = 0; col < 8; col++) {
+      byte actualRow = startRow + row;
+      byte actualCol = startCol + col;
+      lc.setLed(0, row, col, (matrix[actualRow][actualCol] > 0 && matrix[actualRow][actualCol] != 5));
     }
   }
 }
+
+
+// void updatePositions() {
+//   int xValue = analogRead(xPin);
+//   int yValue = analogRead(yPin);
+
+//   xLastPos = xPos;
+//   yLastPos = yPos;
+
+//   // Calculate the new position
+//   byte newXPos = xPos;
+//   byte newYPos = yPos;
+
+//   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
+
+//   switch (direction) {
+//     case UP:
+//       newYPos = (yPos > 0) ? yPos - 1 : yPos;  // Move up only if not at the top edge
+//       break;
+//     case DOWN:
+//       newYPos = (yPos < matrixSize - 1) ? yPos + 1 : yPos;  // Move down only if not at the bottom edge
+//       break;
+//     case LEFT:
+//       newXPos = (xPos > 0) ? xPos - 1 : xPos;  // Move left only if not at the left edge
+//       break;
+//     case RIGHT:
+//       newXPos = (xPos < matrixSize - 1) ? xPos + 1 : xPos;  // Move right only if not at the right edge
+//       break;
+//     case CENTERED:
+//       // Do nothing if the joystick is centered
+//       break;
+//   }
+
+//   // Only update the position if the new position is not a wall
+//   if (matrix[newXPos][newYPos] != 3) {
+//     xPos = newXPos;
+//     yPos = newYPos;
+//   }
+
+//   // Update matrix
+//   if (xPos != xLastPos || yPos != yLastPos) {
+//     updateMatrix();
+//     matrix[xLastPos][yLastPos] = 0;
+//     matrix[xPos][yPos] = 1;
+//   }
+// }
+
 
 void updatePositions() {
   int xValue = analogRead(xPin);
@@ -723,24 +840,24 @@ void updatePositions() {
 
   switch (direction) {
     case UP:
-      newYPos = (yPos > 0) ? yPos - 1 : yPos;  // Move up only if not at the top edge
+      newYPos = max(yPos - 1, 0);
       break;
     case DOWN:
-      newYPos = (yPos < matrixSize - 1) ? yPos + 1 : yPos;  // Move down only if not at the bottom edge
+      newYPos = min(yPos + 1, matrixSize - 1);
       break;
     case LEFT:
-      newXPos = (xPos > 0) ? xPos - 1 : xPos;  // Move left only if not at the left edge
+      newXPos = max(xPos - 1, 0);
       break;
     case RIGHT:
-      newXPos = (xPos < matrixSize - 1) ? xPos + 1 : xPos;  // Move right only if not at the right edge
+      newXPos = min(xPos + 1, matrixSize - 1);
       break;
     case CENTERED:
       // Do nothing if the joystick is centered
       break;
   }
 
-  // Only update the position if the new position is not a wall
-  if (matrix[newXPos][newYPos] != 3) {
+  // Check if the new position is a wall or door
+  if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4) {
     xPos = newXPos;
     yPos = newYPos;
   }
@@ -765,10 +882,10 @@ void placeBomb() {
 
 void explodeBomb() {
   matrix[bombXPos][bombYPos] = 0;
-  if (bombXPos > 0) matrix[bombXPos - 1][bombYPos] = 0;
-  if (bombXPos < matrixSize - 1) matrix[bombXPos + 1][bombYPos] = 0;
-  if (bombYPos > 0) matrix[bombXPos][bombYPos - 1] = 0;
-  if (bombYPos < matrixSize - 1) matrix[bombXPos][bombYPos + 1] = 0;
+  if (bombXPos > 0 && matrix[bombXPos - 1][bombYPos] != 4) matrix[bombXPos - 1][bombYPos] = 0;
+  if (bombXPos < matrixSize - 1 && matrix[bombXPos + 1][bombYPos] != 4) matrix[bombXPos + 1][bombYPos] = 0;
+  if (bombYPos > 0 && matrix[bombXPos][bombYPos - 1] != 4) matrix[bombXPos][bombYPos - 1] = 0;
+  if (bombYPos < matrixSize - 1 && matrix[bombXPos][bombYPos + 1] != 4) matrix[bombXPos][bombYPos + 1] = 0;
   bombPlanted = false;
   updateMatrix();
 }
