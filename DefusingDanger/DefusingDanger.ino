@@ -48,22 +48,22 @@ bool specialBombActive = true;
 // byte matrix[matrixSize][matrixSize] = {};
 
 byte matrix[matrixSize][matrixSize] = {
-        {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4},
-        {4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4},
-        {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}
+  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4 },
+  { 4, 4, 4, 5, 4, 4, 4, 4, 4, 4, 4, 5, 4, 4, 4, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
+  { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 }
 };
 
 bool buttonState = HIGH;
@@ -106,7 +106,6 @@ enum GameState {
   ADJUST_PLAYER_NAME,
   HIGHSCORE,
   ABOUT,
-  DEBUGG,
   END_MESSAGE
 };
 
@@ -133,9 +132,9 @@ const int EEPROM_HIGHSCORE_START_ADDR = 100;  // Starting address for highscores
 Highscore highscores[maxHighscores];
 
 unsigned long gameStartTime;
+unsigned long introMessageStartTime;
 
 bool printed = false;
-
 
 JoystickDirection lastJoystickDirection = CENTERED;
 
@@ -182,6 +181,10 @@ bool isJoystickButtonDebounced() {
 
 void setup() {
   Serial.begin(9600);
+
+  lcd.begin(16, 2);
+
+  introMessageStartTime = millis();
   //I need this for generate maps that are different
   randomSeed(analogRead(0));
 
@@ -234,10 +237,7 @@ void updateHighscores(const char* playerName, unsigned long playerScore) {
   }
 
   if (playerScore < highscores[0].score || highscores[0].score == 0) {
-    //Serial.println(score);
     int length = sizeof(playerName);
-    for (int i = 0; i < length; i++)
-      Serial.print(playerName[i]);
     swap(highscores[0], highscores[1]);
     strcpy(highscores[0].name, playerName);
     highscores[0].score = playerScore;
@@ -294,9 +294,6 @@ void handleMenu() {
     case ADJUST_PLAYER_NAME:
       adjustPlayerName();
       break;
-    case DEBUGG:
-      debugg();
-      break;
     case ABOUT:
       displayAbout();
       break;
@@ -308,37 +305,31 @@ void handleMenu() {
 }
 
 void changeGameState(GameState newGameState) {
-  lcd.setCursor(1, 0);
-  lcd.clear();
   lcd.setCursor(0, 0);
+  lcd.clear();
+  lcd.setCursor(0, 1);
   lcd.clear();
   gameState = newGameState;
 }
 
 void DisplayIntroMessage() {
-  lcd.begin(16, 2);
-  lcd.print("Welcome to");
+  int currentTime = millis();
 
-  lcd.setCursor(0, 1);
-  lcd.print("Defusing Danger");
-
-  unsigned long startTime = millis();
-  unsigned long duration = 5000;
-
-  while (millis() - startTime < duration) {}
-
-  lcd.clear();
-  changeGameState(MENU);
-
-  gameStartTime = millis();
+  if (currentTime - introMessageStartTime < 5000) {
+    lcd.setCursor(0, 0);
+    lcd.print("Welcome to");
+    lcd.setCursor(0, 1);
+    lcd.print("Defusing Danger");
+  } else {
+    changeGameState(MENU);
+  }
 }
 
 void displaySettingsMenu(int selectedOption) {
-  //lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("SETTINGS");
   lcd.setCursor(0, 1);
-  lcd.print("                ");  // Clear the second line of the LCD
+  lcd.print("                ");
   lcd.setCursor(0, 1);
   if (selectedOption == 0) {
     lcd.print("LCD Brightness");
@@ -430,7 +421,7 @@ void adjustMatrixBrightness() {
     EEPROM.put(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
   }
 
-  //EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
+  EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
   lc.setIntensity(0, matrixBrightness);
 
   if (direction == DOWN || direction == UP) {
@@ -461,15 +452,6 @@ void adjustLCDBrightness() {
     changeGameState(SETTINGS);
   }
   lcd.clear();
-}
-
-void debugg() {
-  if (!printed) {
-    int length = sizeof(playerName);
-    for (int i = 0; i < length; i++)
-      Serial.print(playerName[i]);
-  }
-  printed = true;
 }
 
 void adjustPlayerName() {
@@ -516,7 +498,6 @@ void adjustPlayerName() {
     playerName[charPosition + 1] = '\0';  // Null-terminate the string
     charPosition = 0;                     // Reset for next time
     changeGameState(MENU);
-    //changeGameState(DEBUGG);
   }
 
   // Return to the menu without saving
@@ -584,10 +565,6 @@ void menuOption() {
 
 
 void displayEndMessage() {
-  // Serial.println(playerName[0]);
-  // Serial.println(playerName[1]);
-  // Serial.println(playerName[2]);
-  // Serial.println(score);
   lcd.print("Congratulations");
   lcd.setCursor(0, 1);
   lcd.print("YOU WIN!");
@@ -696,7 +673,7 @@ void showDefusingCountdown() {
 
   if (buttonPressDuration >= 5000) {
     defuseBomb();
-    bombDefusalInitiated = false;  // Reset defusal state
+    bombDefusalInitiated = false; 
   }
 }
 
@@ -714,57 +691,6 @@ void generateMap() {
   }
 }
 
-// void generateMap() {
-  // Clear the matrix first
-  // for (int i = 0; i < matrixSize; i++) {
-  //   for (int j = 0; j < matrixSize; j++) {
-  //     matrix[i][j] = 0;
-  //   }
-  // }
-
-  // // Create walls to form four 8x8 rooms
-  // for (int i = 0; i < matrixSize; i++) {
-  //   for (int j = 0; j < matrixSize; j++) {
-  //     // Add vertical wall
-  //     if (i == matrixSize / 2) matrix[i][j] = 3;
-  //     // Add horizontal wall
-  //     if (j == matrixSize / 2) matrix[i][j] = 3;
-  //   }
-  // }
-
-  // //matrix[xPos][yPos] = 1;
-  // for (int i = 0; i < matrixSize; i++) {
-  //   for (int j = 0; j < matrixSize; j++) {
-  //     // Check if the current position is not around the player
-  //     if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && random(2)) {
-  //       // Place a wall
-  //       matrix[i][j] = 3;
-  //     }
-  //   }
-  // }
-
-  // // Create doors in the walls (adjust these positions as needed)
-  // matrix[matrixSize / 2][matrixSize / 4] = 0;      // Door on the left wall
-  // matrix[matrixSize / 2][3 * matrixSize / 4] = 0;  // Door on the right wall
-  // matrix[matrixSize / 4][matrixSize / 2] = 0;      // Door on the top wall
-  // matrix[3 * matrixSize / 4][matrixSize / 2] = 0;  // Door on the bottom wall
-
-  // // Place the player
-  // matrix[1][1] = 1;  // Adjust the player's starting position as needed
-
-  // Call updateMatrix() to reflect these changes
-//   updateMatrix();
-// }
-
-
-// void updateMatrix() {
-//   for (int row = 0; row < matrixSize; row++) {
-//     for (int col = 0; col < matrixSize; col++) {
-//       lc.setLed(0, row, col, matrix[row][col] > 0);
-//     }
-//   }
-// }
-
 void updateMatrix() {
   byte startRow = (xPos / 8) * 8;
   byte startCol = (yPos / 8) * 8;
@@ -779,52 +705,6 @@ void updateMatrix() {
 }
 
 
-// void updatePositions() {
-//   int xValue = analogRead(xPin);
-//   int yValue = analogRead(yPin);
-
-//   xLastPos = xPos;
-//   yLastPos = yPos;
-
-//   // Calculate the new position
-//   byte newXPos = xPos;
-//   byte newYPos = yPos;
-
-//   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
-
-//   switch (direction) {
-//     case UP:
-//       newYPos = (yPos > 0) ? yPos - 1 : yPos;  // Move up only if not at the top edge
-//       break;
-//     case DOWN:
-//       newYPos = (yPos < matrixSize - 1) ? yPos + 1 : yPos;  // Move down only if not at the bottom edge
-//       break;
-//     case LEFT:
-//       newXPos = (xPos > 0) ? xPos - 1 : xPos;  // Move left only if not at the left edge
-//       break;
-//     case RIGHT:
-//       newXPos = (xPos < matrixSize - 1) ? xPos + 1 : xPos;  // Move right only if not at the right edge
-//       break;
-//     case CENTERED:
-//       // Do nothing if the joystick is centered
-//       break;
-//   }
-
-//   // Only update the position if the new position is not a wall
-//   if (matrix[newXPos][newYPos] != 3) {
-//     xPos = newXPos;
-//     yPos = newYPos;
-//   }
-
-//   // Update matrix
-//   if (xPos != xLastPos || yPos != yLastPos) {
-//     updateMatrix();
-//     matrix[xLastPos][yLastPos] = 0;
-//     matrix[xPos][yPos] = 1;
-//   }
-// }
-
-
 void updatePositions() {
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
@@ -832,29 +712,36 @@ void updatePositions() {
   xLastPos = xPos;
   yLastPos = yPos;
 
-  // Calculate the new position
   byte newXPos = xPos;
   byte newYPos = yPos;
 
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   switch (direction) {
-    case UP:
-      newYPos = max(yPos - 1, 0);
-      break;
-    case DOWN:
-      newYPos = min(yPos + 1, matrixSize - 1);
-      break;
-    case LEFT:
+    case UP:  
       newXPos = max(xPos - 1, 0);
       break;
-    case RIGHT:
+    case DOWN:  
       newXPos = min(xPos + 1, matrixSize - 1);
       break;
+    case LEFT:  
+      newYPos = max(yPos - 1, 0);
+      break;
+    case RIGHT: 
+      newYPos = min(yPos + 1, matrixSize - 1);
+      break;
     case CENTERED:
-      // Do nothing if the joystick is centered
       break;
   }
+
+  Serial.print(xLastPos);
+  Serial.print(" ");
+  Serial.print(yLastPos);
+  Serial.print(" ");
+  Serial.print(newXPos);
+  Serial.print(" ");
+  Serial.print(newYPos);
+  Serial.println();
 
   // Check if the new position is a wall or door
   if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4) {
@@ -906,7 +793,7 @@ void defuseBomb() {
 void printMatrix() {
   for (int i = 0; i < matrixSize; i++) {
     for (int j = 0; j < matrixSize; j++) {
-      Serial.print(matrix[i][j]);
+      (matrix[i][j]);
       Serial.print(" ");
     }
     Serial.println();
