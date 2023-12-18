@@ -2,18 +2,18 @@
 
 ## Backstory
 
-As a fan of tactical and strategy games like Counter-Strike and Bomberman, I wanted to create a unique game that combines elements of both. . It's a game that challenges players in a strategic environment with a mix of fun and problem-solving.
+As a fan of tactical and strategy games like Counter-Strike and Bomberman, I wanted to create a unique game that combines elements of both. It's a game that challenges players in a strategic environment with a mix of fun and problem-solving.
 
 ## Game Description
 "Defusing Danger" is a grid-based game displayed on an LED matrix, powered by an Arduino. The player's objective is to navigate through a maze, locate a special bomb, and defuse it within a limited time. The game features a randomly generated map for each session, adding an element of unpredictability and replayability.
 
 ## How to Play
 - **Starting the Game:** Power up the Arduino, and you'll be greeted with a welcome message, followed by the main menu.
-- **Navigation:** Use the joystick to move around the grid displayed on the LED matrix.
+- **Navigation:** Use the joystick to navigate around the grid displayed on the LED matrix.
 - **Objective:** Your goal is to find and defuse the bomb before time runs out.
-- **Game Display:** An LCD screen shows your name and the remaining time.
-- **Scoring:** Gain points by time left until games ended.
-- **Ending the Game:** Win by defusing the bomb within the time limit. The game ends if the timer runs out.
+- **Game Display:** The LCD screen displays your name and the remaining time.
+- **Scoring:** Points are awarded based on the time remaining when the game ends.
+- **Ending the Game:** You win by defusing the bomb within the time limit.
 
 ## Components
 - LED Matrix 
@@ -62,5 +62,8 @@ settings and system settings.
 - You should have a feeling of progression in difficulty. Depending on the dynamic of the game, this is done in the same level or with multiple levels. You can make them progress dynamically or have a number of fixed levels with an endgame. Try to introduce some randomness, though.
 
 ## Photo of the setup
+![Image Alt Text](Image/matrix.jpg)
 
 ## Video
+https://youtu.be/B28EVLswOQU)https://youtu.be/B28EVLswOQU
+
