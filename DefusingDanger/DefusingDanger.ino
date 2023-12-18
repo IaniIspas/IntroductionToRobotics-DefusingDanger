@@ -152,6 +152,12 @@ bool win;
 bool staticContentNeedsUpdate = true;
 
 
+// Global variables for displayAbout
+unsigned long aboutMessageStartTime;
+int aboutMessageIndex = 0;
+const int aboutMessageDuration = 5000;  // 5 seconds for each about message screen
+const int aboutMessageCount = 3;        // total number of about messages
+
 void initializeEEPROM() {
   // Read the current values of LCD and Matrix brightness from EEPROM
   //EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
@@ -285,9 +291,11 @@ bool isJoystickButtonDebounced() {
 
 void changeGameState(GameState newGameState) {
   lcd.setCursor(0, 0);
-  lcd.clear();
+  //lcd.clear();
+  lcd.print("                ");
   lcd.setCursor(0, 1);
-  lcd.clear();
+  lcd.print("                ");
+  //lcd.clear();
   gameState = newGameState;
 }
 
@@ -344,25 +352,21 @@ void menuOption() {
     if (buttonState == LOW) {
       if (selectedOption == 0) {
         resetGame();
-        lcd.clear();
+        //lcd.clear();
         changeGameState(START_GAME);
       } else if (selectedOption == 1) {
-        lcd.clear();
-        selectedOption = 0;
+        //lcd.clear();
         changeGameState(SETTINGS);
       } else if (selectedOption == 2) {
-        lcd.clear();
-        selectedOption = 0;
+        startAboutSection();
+        //lcd.clear();
         changeGameState(ABOUT);
       } else if (selectedOption == 3) {
-        lcd.clear();
-        selectedOption = 0;
+        //lcd.clear();
         changeGameState(HIGHSCORE);
       } else if (selectedOption == 4) {
-        lcd.clear();
-        selectedOption = 0;
+        //lcd.clear();
         changeGameState(ADJUST_DIFFICULTY);
-        selectedOption = 0;
       } else if (selectedOption == 5) {
         gameState = HOW_TO_PLAY;
       }
@@ -458,7 +462,7 @@ void displayHighscores() {
 }
 
 void resetHighscores() {
-  lcd.clear();
+  lcd.print("                ");
   lcd.print("Reset Highscores?");
   lcd.setCursor(0, 1);
   lcd.print("Press btn to conf");
@@ -559,6 +563,20 @@ void adjustDifficulty() {
 }
 
 void displayAbout() {
+  unsigned long currentTime = millis();
+
+  // Check if it's time to switch to the next about message
+  if (currentTime - aboutMessageStartTime > aboutMessageDuration) {
+    aboutMessageStartTime = currentTime;  // Reset the start time for the next message
+    aboutMessageIndex++;
+
+    if (aboutMessageIndex >= aboutMessageCount) {
+      changeGameState(MENU);  // Return to the menu after the last message
+      aboutMessageIndex = 0;  // Reset the index for the next time
+      return;
+    }
+  }
+
   const char* aboutTextDown[] = {
     "DefusingDanger",
     "Ispas Jany",
@@ -571,18 +589,19 @@ void displayAbout() {
     "Github"
   };
 
-  lcd.clear();
+  // Display the current about message
+  //lcd.clear();
+  lcd.print("              ");
+  lcd.setCursor(0, 0);
+  lcd.print(aboutTextUp[aboutMessageIndex]);
+  lcd.setCursor(0, 1);
+  lcd.print(aboutTextDown[aboutMessageIndex]);
+}
 
-  for (int i = 0; i < 3; i++) {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(aboutTextUp[i]);
-    lcd.setCursor(0, 1);
-    lcd.print(aboutTextDown[i]);
-
-    delay(2000);
-  }
-  changeGameState(MENU);
+// Call this function to start displaying the about section
+void startAboutSection() {
+  aboutMessageStartTime = millis();  // Set the start time for the about section
+  aboutMessageIndex = 0;             // Start with the first message
 }
 
 void displayHowToPlay() {
@@ -640,7 +659,8 @@ void adjustMatrixBrightness() {
   lc.setIntensity(0, matrixBrightness);
 
   if (direction == DOWN || direction == UP) {
-    lcd.clear();
+    //lcd.clear();
+    lcd.print("              ");
     changeGameState(SETTINGS);
   }
   //lcd.clear();
@@ -724,7 +744,8 @@ void adjustPlayerName() {
 
 void displayEndMessage(bool win) {
   turnOnMatrix();
-  lcd.clear();
+  //lcd.clear();
+  lcd.print("              ");
   lcd.setCursor(0, 0);
   if (win) {
     lcd.print("Congratulations");
@@ -735,6 +756,7 @@ void displayEndMessage(bool win) {
     lcd.setCursor(0, 1);
     lcd.print("FAIL");
   }
+  delay(5000);  // Keep the message for 5 seconds
 
   changeGameState(MENU);  // Return to the main menu
 }
@@ -832,9 +854,14 @@ void handleButtonInteractions() {
   if (isJoystickButtonDebounced()) {
     if (buttonState == LOW) {
       buttonPressStartTime = millis();
+
+
       // Check if player is adjacent to the special bomb's position to initiate defusing
       if ((abs(xPos - specialBombXPos) <= 1 && yPos == specialBombYPos) || (abs(yPos - specialBombYPos) <= 1 && xPos == specialBombXPos)) {
-        bombDefusalInitiated = true;
+        unsigned long remainingTime = (gameDuration - (millis() - gameStartTime)) / 1000;
+        if (remainingTime >= 5) {
+          bombDefusalInitiated = true;
+        }
       } else {
         // Else, initiate bomb placement if not already defusing a bomb
         bombPlacementInitiated = !bombDefusalInitiated;
@@ -848,6 +875,27 @@ void handleButtonInteractions() {
     }
   }
 }
+
+// void handleButtonInteractions() {
+//   if (isJoystickButtonDebounced()) {
+//     if (buttonState == LOW) {
+//       buttonPressStartTime = millis();
+
+//       // Check if there's enough time left to defuse the bomb
+// unsigned long remainingTime = (gameDuration - (millis() - gameStartTime)) / 1000;
+//       if (remainingTime >= 5) {
+//         if ((abs(xPos - specialBombXPos) <= 1 && yPos == specialBombYPos) || (abs(yPos - specialBombYPos) <= 1 && xPos == specialBombXPos)) {
+//           bombDefusalInitiated = true;
+//         } else {
+//           bombPlacementInitiated = !bombDefusalInitiated;
+//         }
+//       }
+//     } else {
+//       bombPlacementInitiated = false;
+//       bombDefusalInitiated = false;
+//     }
+//   }
+// }
 
 
 void handleBombBlinking() {
@@ -868,6 +916,7 @@ void showDefusingCountdown() {
   unsigned long buttonPressDuration = millis() - buttonPressStartTime;
   unsigned long timeRemaining = 5000 - buttonPressDuration;
 
+  lcd.setCursor(0, 1);
   lcd.print("        ");
   lcd.setCursor(0, 0);
   lcd.print("Defusing: ");
@@ -971,14 +1020,37 @@ void placeBomb() {
   updateMatrix();
 }
 
+// void explodeBomb() {
+//   matrix[bombXPos][bombYPos] = 0;
+//   if (bombXPos > 0 && matrix[bombXPos - 1][bombYPos] != 4) matrix[bombXPos - 1][bombYPos] = 0;
+//   if (bombXPos < matrixSize - 1 && matrix[bombXPos + 1][bombYPos] != 4) matrix[bombXPos + 1][bombYPos] = 0;
+//   if (bombYPos > 0 && matrix[bombXPos][bombYPos - 1] != 4) matrix[bombXPos][bombYPos - 1] = 0;
+//   if (bombYPos < matrixSize - 1 && matrix[bombXPos][bombYPos + 1] != 4) matrix[bombXPos][bombYPos + 1] = 0;
+//   bombPlanted = false;
+//   updateMatrix();
+// }
+
 void explodeBomb() {
+  // Check if player is next to the bomb
+  bool playerIsAdjacent = (xPos == bombXPos && abs(yPos - bombYPos) <= 1) || 
+                          (yPos == bombYPos && abs(xPos - bombXPos) <= 1);
+
+  // Clear around areas (except for indestructible walls)
   matrix[bombXPos][bombYPos] = 0;
   if (bombXPos > 0 && matrix[bombXPos - 1][bombYPos] != 4) matrix[bombXPos - 1][bombYPos] = 0;
   if (bombXPos < matrixSize - 1 && matrix[bombXPos + 1][bombYPos] != 4) matrix[bombXPos + 1][bombYPos] = 0;
   if (bombYPos > 0 && matrix[bombXPos][bombYPos - 1] != 4) matrix[bombXPos][bombYPos - 1] = 0;
   if (bombYPos < matrixSize - 1 && matrix[bombXPos][bombYPos + 1] != 4) matrix[bombXPos][bombYPos + 1] = 0;
+  
   bombPlanted = false;
   updateMatrix();
+
+  // If player is next to the bomb, they lose
+  if (playerIsAdjacent) {
+    gameOver = true;
+    win = false; 
+    changeGameState(END_MESSAGE);
+  }
 }
 
 void defuseBomb() {
