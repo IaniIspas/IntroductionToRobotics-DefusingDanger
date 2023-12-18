@@ -114,10 +114,17 @@ char playerName[nameLength + 1] = "N/A   ";
 unsigned long gameStartTime;
 const unsigned long gameDuration = 60000;
 unsigned long introMessageStartTime;
+unsigned long aboutMessageStartTime;
+int aboutMessageIndex = 0;
+const int aboutMessageDuration = 5000;  // 5 seconds for each about message screen
+const int aboutMessageCount = 3;        // total number of about messages
+
+unsigned long endMessageStartTime;
+bool onFirstScreen = true;
 JoystickDirection lastJoystickDirection = CENTERED;
 
-// Constants for Joystick
-const int joystickDeadZone = 200;  // Deadzone threshold for joystick
+// Deadzone threshold for joystick
+const int joystickDeadZone = 200;  
 
 // Variables for Joystick Center Position
 int centerJoystickX;
@@ -149,22 +156,15 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 // Player win state
 bool win;
 
-bool staticContentNeedsUpdate = true;
-
-
-// Global variables for displayAbout
-unsigned long aboutMessageStartTime;
-int aboutMessageIndex = 0;
-const int aboutMessageDuration = 5000;  // 5 seconds for each about message screen
-const int aboutMessageCount = 3;        // total number of about messages
-
 void initializeEEPROM() {
   // Read the current values of LCD and Matrix brightness from EEPROM
   //EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
 
+  EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
+
   // Initialize highscores from EEPROM
-  highscoreInit();
+  //highscoreInit();
 }
 
 void setup() {
@@ -297,6 +297,11 @@ void changeGameState(GameState newGameState) {
   lcd.print("                ");
   //lcd.clear();
   gameState = newGameState;
+
+  if (newGameState == END_MESSAGE) {
+    endMessageStartTime = millis();  // Set the start time for the end message
+    onFirstScreen = true;
+  }
 }
 
 
@@ -742,24 +747,83 @@ void adjustPlayerName() {
   }
 }
 
-void displayEndMessage(bool win) {
-  turnOnMatrix();
-  //lcd.clear();
-  lcd.print("              ");
-  lcd.setCursor(0, 0);
-  if (win) {
-    lcd.print("Congratulations");
-    lcd.setCursor(0, 1);
-    lcd.print("YOU WIN!");
-  } else {
-    lcd.print("Game Over");
-    lcd.setCursor(0, 1);
-    lcd.print("FAIL");
-  }
-  delay(5000);  // Keep the message for 5 seconds
+// void displayEndMessage(bool win) {
+// turnOnMatrix();
+//   //lcd.clear();
+//   lcd.print("              ");
+//   lcd.setCursor(0, 0);
+//   if (win) {
+//     lcd.print("Congratulations");
+//     lcd.setCursor(0, 1);
+//     lcd.print("YOU WIN!");
+//   } else {
+//     lcd.print("Game Over");
+//     lcd.setCursor(0, 1);
+//     lcd.print("FAIL");
+//   }
+//   delay(5000);  // Keep the message for 5 seconds
 
-  changeGameState(MENU);  // Return to the main menu
+//   changeGameState(MENU);  // Return to the main menu
+// }
+
+void displayEndMessage(bool win) {
+
+  turnOnMatrix();
+  unsigned long currentTime = millis();
+
+  // Check if we are still on the first screen
+  if (onFirstScreen) {
+    if (currentTime - endMessageStartTime < 5000) {  // 5 seconds duration for first screen
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      if (win) {
+        lcd.print("Congratulations!");
+        lcd.setCursor(0, 1);
+        switch (currentDifficulty) {
+          case 0: lcd.print("Diff: EASY"); break;
+          case 1: lcd.print("Diff: MEDIUM"); break;
+          case 2: lcd.print("Diff: HARD"); break;
+        }
+      } else {
+        lcd.print("Game Over");
+        lcd.setCursor(0, 1);
+        lcd.print("Try Again!");
+      }
+    } else {
+      onFirstScreen = false;  // Move to the second screen
+      lcd.clear();
+    }
+  }
+
+  // Display the second screen
+  if (!onFirstScreen) {
+    lcd.setCursor(0, 0);
+    lcd.print(playerName);
+    lcd.print(":");
+    lcd.print(score);
+    lcd.setCursor(0, 1);
+    if (isNewHighscore(playerName, score)) {
+      lcd.print("New Highscore!");
+    } else {
+      lcd.print(" ");  // Placeholder for empty second line
+    }
+  }
+
+  // Wait for button press to exit
+  if (isJoystickButtonDebounced() && buttonState == LOW && !onFirstScreen) {
+    changeGameState(MENU);  // Return to the menu after button press
+  }
 }
+
+bool isNewHighscore(const char* playerName, unsigned long playerScore) {
+  for (int i = 0; i < maxHighscores; i++) {
+    if (playerScore > highscores[i].score) {
+      return true;  // Player's score is higher than a recorded highscore
+    }
+  }
+  return false;  // Player's score did not surpass any highscores
+}
+
 
 
 void resetGame() {
@@ -1032,8 +1096,7 @@ void placeBomb() {
 
 void explodeBomb() {
   // Check if player is next to the bomb
-  bool playerIsAdjacent = (xPos == bombXPos && abs(yPos - bombYPos) <= 1) || 
-                          (yPos == bombYPos && abs(xPos - bombXPos) <= 1);
+  bool playerIsAdjacent = (xPos == bombXPos && abs(yPos - bombYPos) <= 1) || (yPos == bombYPos && abs(xPos - bombXPos) <= 1);
 
   // Clear around areas (except for indestructible walls)
   matrix[bombXPos][bombYPos] = 0;
@@ -1041,14 +1104,14 @@ void explodeBomb() {
   if (bombXPos < matrixSize - 1 && matrix[bombXPos + 1][bombYPos] != 4) matrix[bombXPos + 1][bombYPos] = 0;
   if (bombYPos > 0 && matrix[bombXPos][bombYPos - 1] != 4) matrix[bombXPos][bombYPos - 1] = 0;
   if (bombYPos < matrixSize - 1 && matrix[bombXPos][bombYPos + 1] != 4) matrix[bombXPos][bombYPos + 1] = 0;
-  
+
   bombPlanted = false;
   updateMatrix();
 
   // If player is next to the bomb, they lose
   if (playerIsAdjacent) {
     gameOver = true;
-    win = false; 
+    win = false;
     changeGameState(END_MESSAGE);
   }
 }
