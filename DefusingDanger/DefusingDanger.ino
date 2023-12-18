@@ -13,16 +13,23 @@ const int buttonPin = 2;
 // LedControl initialization
 LedControl lc = LedControl(dinPin, clockPin, loadPin, 1);
 
-const int lcdBacklightPin = 3;
+const int lcdBacklightPin = 6;
 
 // EEPROM addresses
 const int EEPROM_LCD_BRIGHTNESS_ADDR = 0;
 const int EEPROM_MATRIX_BRIGHTNESS_ADDR = 5;
+const int EEPROM_SOUND_SETTING_ADDR = 10;
 const int EEPROM_HIGHSCORE_START_ADDR = 100;
 
 // LCD and matrix brightness settings
 byte LCDBrightness = 10;
 byte matrixBrightness;
+
+//Buzzer
+const int buzzerPin = A3;
+bool soundEnabled = true;
+bool soundPlayed = false;
+
 
 // Player position and movement
 byte xPos = 1;
@@ -51,7 +58,7 @@ byte specialBombYPos = 6;
 const byte specialBombBlinkInterval = 100;
 unsigned long lastSpecialBombBlinked = 0;
 bool specialBombActive = true;
-unsigned long specialBombMoveInterval = 15000;  // 25 seconds
+unsigned long specialBombMoveInterval = 15000;
 unsigned long lastSpecialBombMoveTime = 0;
 
 // Game map matrix
@@ -103,6 +110,7 @@ enum GameState { WELCOME,
                  RESET_HIGHSCORES,
                  ABOUT,
                  HOW_TO_PLAY,
+                 //ADJUST_SOUND,
                  END_MESSAGE };
 
 // Game state and settings
@@ -118,8 +126,8 @@ const unsigned long gameDuration = 60000;
 unsigned long introMessageStartTime;
 unsigned long aboutMessageStartTime;
 int aboutMessageIndex = 0;
-const int aboutMessageDuration = 5000;  // 5 seconds for each about message screen
-const int aboutMessageCount = 3;        // total number of about messages
+const int aboutMessageDuration = 5000;
+const int aboutMessageCount = 3;
 
 unsigned long endMessageStartTime;
 bool onFirstScreen = true;
@@ -150,7 +158,7 @@ Highscore highscores[maxHighscores];
 const byte rs = 9;
 const byte en = 8;
 const byte d4 = 7;
-const byte d5 = 6;
+const byte d5 = 3;
 const byte d6 = 5;
 const byte d7 = 4;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
@@ -160,13 +168,11 @@ bool win;
 
 void initializeEEPROM() {
   // Read the current values of LCD and Matrix brightness from EEPROM
+  highscoreInit();
   EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
-
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
-
-  // Initialize highscores from EEPROM
-  //highscoreInit();
+  EEPROM.get(EEPROM_SOUND_SETTING_ADDR, soundEnabled);
 }
 
 void setup() {
@@ -187,6 +193,7 @@ void setup() {
   turnOnMatrix();
 
   pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(buzzerPin, OUTPUT);
   pinMode(lcdBacklightPin, OUTPUT);
   analogWrite(lcdBacklightPin, LCDBrightness);
   //Set Joystick Center Position
@@ -251,7 +258,6 @@ void turnOnMatrix() {
   }
 }
 
-
 JoystickDirection determineJoystickMovement(int x, int y) {
   bool inDeadZone = abs(x - centerJoystickX) < joystickDeadZone && abs(y - centerJoystickY) < joystickDeadZone;
 
@@ -295,11 +301,9 @@ bool isJoystickButtonDebounced() {
 
 void changeGameState(GameState newGameState) {
   lcd.setCursor(0, 0);
-  //lcd.clear();
-  lcd.print("                ");
+  lcd.clear();
   lcd.setCursor(0, 1);
-  lcd.print("                ");
-  //lcd.clear();
+  lcd.clear();
   gameState = newGameState;
 
   if (newGameState == END_MESSAGE) {
@@ -361,20 +365,15 @@ void menuOption() {
     if (buttonState == LOW) {
       if (selectedOption == 0) {
         resetGame();
-        //lcd.clear();
         changeGameState(START_GAME);
       } else if (selectedOption == 1) {
-        //lcd.clear();
         changeGameState(SETTINGS);
       } else if (selectedOption == 2) {
         startAboutSection();
-        //lcd.clear();
         changeGameState(ABOUT);
       } else if (selectedOption == 3) {
-        //lcd.clear();
         changeGameState(HIGHSCORE);
       } else if (selectedOption == 4) {
-        //lcd.clear();
         changeGameState(ADJUST_DIFFICULTY);
       } else if (selectedOption == 5) {
         gameState = HOW_TO_PLAY;
@@ -457,7 +456,6 @@ void displayHighscores() {
     case DOWN:
       changeGameState(MENU);
   }
-
   lcd.setCursor(0, 0);
   lcd.print("Highscores");
   lcd.setCursor(0, 1);
@@ -466,15 +464,16 @@ void displayHighscores() {
   lcd.print(currentHighscoreIndex + 1);
   lcd.print(".");
   lcd.print(highscores[currentHighscoreIndex].name);
-  lcd.print("-");
+  lcd.print(" : ");
   lcd.print(highscores[currentHighscoreIndex].score);
 }
 
 void resetHighscores() {
   lcd.print("                ");
-  lcd.print("Reset Highscores?");
+  lcd.setCursor(0, 0);
+  lcd.print("Are you sure?");
   lcd.setCursor(0, 1);
-  lcd.print("Press btn to conf");
+  lcd.print("Press btn");
 
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
@@ -508,6 +507,9 @@ void displaySettingsMenu(int selectedOption) {
     lcd.print("Set Name");
   } else if (selectedOption == 3) {
     lcd.print("Reset Highscores");
+  } else if (selectedOption == 4) {
+    lcd.print("Sound: ");
+    lcd.print(soundEnabled ? "On" : "Off");
   }
 }
 
@@ -517,9 +519,9 @@ void adjustSettings() {
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   if (direction == DOWN) {
-    selectedOption = (selectedOption + 1) % 4;
+    selectedOption = (selectedOption + 1) % 5;
   } else if (direction == UP) {
-    selectedOption = (selectedOption - 1 + 4) % 4;
+    selectedOption = (selectedOption - 1 + 5) % 5;
   } else if (direction == LEFT || direction == RIGHT) {
     changeGameState(MENU);
   }
@@ -535,6 +537,9 @@ void adjustSettings() {
       changeGameState(ADJUST_PLAYER_NAME);
     } else if (selectedOption == 3) {
       changeGameState(RESET_HIGHSCORES);
+    } else if (selectedOption == 4) {
+      toggleSoundSetting();
+      changeGameState(SETTINGS);
     }
   }
 }
@@ -593,9 +598,9 @@ void displayAbout() {
   };
 
   const char* aboutTextUp[] = {
-    "Game Name",
-    "Author",
-    "Github"
+    "Game Name ",
+    "Author    ",
+    "GithubUser"
   };
 
   // Display the current about message
@@ -605,6 +610,7 @@ void displayAbout() {
   lcd.print(aboutTextUp[aboutMessageIndex]);
   lcd.setCursor(0, 1);
   lcd.print(aboutTextDown[aboutMessageIndex]);
+  lcd.print("              ");
 }
 
 // Call this function to start displaying the about section
@@ -635,15 +641,14 @@ void displayHowToPlay() {
       lcd.setCursor(0, 1);
       lcd.print("& press button");
       break;
-      // Add more cases if you have additional instructions
   }
 
   // Logic to change page on button press
   if (isJoystickButtonDebounced() && buttonState == LOW) {
     page++;
-    if (page > 2) {  // Adjust this number based on the total number of pages
+    if (page > 2) {
       page = 0;
-      changeGameState(MENU);  // Return to menu after the last page
+      changeGameState(MENU);
     }
   }
 }
@@ -668,11 +673,9 @@ void adjustMatrixBrightness() {
   lc.setIntensity(0, matrixBrightness);
 
   if (direction == DOWN || direction == UP) {
-    //lcd.clear();
     lcd.print("              ");
     changeGameState(SETTINGS);
   }
-  //lcd.clear();
   lcd.print("                ");
 }
 
@@ -686,10 +689,10 @@ void adjustLCDBrightness() {
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   if (direction == LEFT) {
-    LCDBrightness = max(LCDBrightness - 1, 0);
+    LCDBrightness = max(LCDBrightness - 10, 0);
     EEPROM.put(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   } else if (direction == RIGHT) {
-    LCDBrightness = min(LCDBrightness + 1, 255);
+    LCDBrightness = min(LCDBrightness + 10, 255);
     EEPROM.put(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   }
   EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
@@ -699,7 +702,6 @@ void adjustLCDBrightness() {
   if (direction == DOWN || direction == UP) {
     changeGameState(SETTINGS);
   }
-  //lcd.clear();
   lcd.print("                ");
 }
 
@@ -720,7 +722,7 @@ void adjustPlayerName() {
     else currentChar--;
   }
 
-  lcd.print("                ");  // Clear the second line of the LCD
+  lcd.print("                ");
   lcd.setCursor(0, 0);
   lcd.print("Name: ");
   for (int i = 0; i < charPosition; i++) {
@@ -746,11 +748,16 @@ void adjustPlayerName() {
     charPosition = 0;                     // Reset for next time
     changeGameState(MENU);
   }
+}
 
-  // Return to the menu without saving
-  if (direction == DOWN) {
-    charPosition = 0;  // Reset for next time
-    changeGameState(MENU);
+void toggleSoundSetting() {
+  soundEnabled = !soundEnabled;
+  EEPROM.put(EEPROM_SOUND_SETTING_ADDR, soundEnabled);
+}
+
+void playSound(int pin, int frequency, int duration) {
+  if (soundEnabled) {
+    tone(pin, frequency, duration);
   }
 }
 
@@ -772,10 +779,18 @@ void displayEndMessage(bool win) {
           case 1: lcd.print("Diff: MEDIUM"); break;
           case 2: lcd.print("Diff: HARD"); break;
         }
+        if (!soundPlayed) {
+          playSound(buzzerPin, 1000, 200);
+          soundPlayed = true;
+        }
       } else {
         lcd.print("Game Over");
         lcd.setCursor(0, 1);
         lcd.print("Try Again!");
+        if (!soundPlayed) {
+          playSound(buzzerPin, 250, 200);
+          soundPlayed = true;
+        }
       }
     } else {
       onFirstScreen = false;  // Move to the second screen
@@ -806,10 +821,10 @@ void displayEndMessage(bool win) {
 bool isNewHighscore(const char* playerName, unsigned long playerScore) {
   for (int i = 0; i < maxHighscores; i++) {
     if (playerScore > highscores[i].score) {
-      return true;  // Player's score is higher than a recorded highscore
+      return true;
     }
   }
-  return false;  // Player's score did not surpass any highscores
+  return false;
 }
 
 
@@ -829,6 +844,7 @@ void resetGame() {
   gameStartTime = millis();
   lastSpecialBombMoveTime = 0;
   lastSpecialBombMoveTime = millis();
+  soundPlayed = false;
 
   for (int row = 0; row < matrixSize; row++) {
     for (int col = 0; col < matrixSize; col++) {
@@ -907,7 +923,6 @@ void handleButtonInteractions() {
     if (buttonState == LOW) {
       buttonPressStartTime = millis();
 
-
       // Check if player is adjacent to the special bomb's position to initiate defusing
       if ((abs(xPos - specialBombXPos) <= 1 && yPos == specialBombYPos) || (abs(yPos - specialBombYPos) <= 1 && xPos == specialBombXPos)) {
         unsigned long remainingTime = (gameDuration - (millis() - gameStartTime)) / 1000;
@@ -927,28 +942,6 @@ void handleButtonInteractions() {
     }
   }
 }
-
-// void handleButtonInteractions() {
-//   if (isJoystickButtonDebounced()) {
-//     if (buttonState == LOW) {
-//       buttonPressStartTime = millis();
-
-//       // Check if there's enough time left to defuse the bomb
-// unsigned long remainingTime = (gameDuration - (millis() - gameStartTime)) / 1000;
-//       if (remainingTime >= 5) {
-//         if ((abs(xPos - specialBombXPos) <= 1 && yPos == specialBombYPos) || (abs(yPos - specialBombYPos) <= 1 && xPos == specialBombXPos)) {
-//           bombDefusalInitiated = true;
-//         } else {
-//           bombPlacementInitiated = !bombDefusalInitiated;
-//         }
-//       }
-//     } else {
-//       bombPlacementInitiated = false;
-//       bombDefusalInitiated = false;
-//     }
-//   }
-// }
-
 
 void handleBombBlinking() {
   if (bombPlanted && millis() - lastBombBlinked > bombBlinkInterval) {
@@ -997,7 +990,6 @@ void generateMap() {
   }
   for (int i = 1; i < matrixSize - 1; i++) {
     for (int j = 1; j < matrixSize - 1; j++) {
-      // Check if the current position is not around the player
       if ((abs(i - xPos) > 1 || abs(j - yPos) > 1) && (i != specialBombXPos || j != specialBombYPos) && matrix[i][j] != 4 && random(100) < wallProbability && matrix[i][j] != 5) {
         // Place a wall
         matrix[i][j] = 3;
@@ -1049,7 +1041,7 @@ void updatePositions() {
       break;
   }
 
-  // Check if the new position is a wall or door
+  // Check if the new position is valid
   if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4 && !(newXPos == specialBombXPos && newYPos == specialBombYPos)) {
     xPos = newXPos;
     yPos = newYPos;
@@ -1070,17 +1062,8 @@ void placeBomb() {
   bombPlanted = true;
   matrix[bombXPos][bombYPos] = 2;
   updateMatrix();
+  playSound(buzzerPin, 500, 100);  // 500Hz for 100 milliseconds
 }
-
-// void explodeBomb() {
-//   matrix[bombXPos][bombYPos] = 0;
-//   if (bombXPos > 0 && matrix[bombXPos - 1][bombYPos] != 4) matrix[bombXPos - 1][bombYPos] = 0;
-//   if (bombXPos < matrixSize - 1 && matrix[bombXPos + 1][bombYPos] != 4) matrix[bombXPos + 1][bombYPos] = 0;
-//   if (bombYPos > 0 && matrix[bombXPos][bombYPos - 1] != 4) matrix[bombXPos][bombYPos - 1] = 0;
-//   if (bombYPos < matrixSize - 1 && matrix[bombXPos][bombYPos + 1] != 4) matrix[bombXPos][bombYPos + 1] = 0;
-//   bombPlanted = false;
-//   updateMatrix();
-// }
 
 void explodeBomb() {
   // Check if player is next to the bomb
@@ -1101,6 +1084,8 @@ void explodeBomb() {
     gameOver = true;
     win = false;
     changeGameState(END_MESSAGE);
+
+    playSound(buzzerPin, 200, 300);
   }
 }
 
