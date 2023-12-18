@@ -104,6 +104,7 @@ enum GameState {
   ADJUST_PLAYER_NAME,
   ADJUST_DIFFICULTY,
   HIGHSCORE,
+  RESET_HIGHSCORES,
   ABOUT,
   END_MESSAGE
 };
@@ -115,19 +116,20 @@ int generated = 0;
 int score = 0;
 byte currentDifficulty = 0;
 
-const int nameLength = 8;                   // Maximum length of the name
-char playerName[nameLength + 1] = "     ";  // Initialize with spaces
+const int nameLength = 8;                    // Maximum length of the name
+char playerName[nameLength + 1] = "N/A   ";  // Initialize with spaces
 
 struct Highscore {
   char name[nameLength + 1];
   unsigned long score;
   Highscore()
-    : name("N/A"), score(999) {}
+    : name("N/A"), score(0) {}
 };
 
 
-const int maxHighscores = 2;                  // Number of highscores to keep
+const int maxHighscores = 3;                  // Number of highscores to keep
 const int EEPROM_HIGHSCORE_START_ADDR = 100;  // Starting address for highscores in EEPROM
+int currentHighscoreIndex = 0;
 
 Highscore highscores[maxHighscores];
 
@@ -229,37 +231,91 @@ void swap(Highscore& a, Highscore& b) {
 }
 
 void updateHighscores(const char* playerName, unsigned long playerScore) {
-  Serial.print(score);
+  Serial.print(playerName);
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
-  // Find the right position to insert the new score
-  int position = 0;
-  for (position = 0; position < maxHighscores; ++position) {
-    if (playerScore < highscores[position].score) {
+
+  int insertPosition = -1;  // Position where new highscore should be inserted
+
+
+  if (playerName[0] == " ")
+    strcpy(playerName, "N/A");
+  Serial.print(playerName);
+  // Find the position to insert the new highscore
+  for (int i = 0; i < maxHighscores; i++) {
+    if (playerScore > highscores[i].score) {
+      insertPosition = i;
       break;
     }
   }
 
-  if (playerScore > highscores[0].score) {
-    int length = sizeof(playerName);
-    swap(highscores[0], highscores[1]);
-    strcpy(highscores[0].name, playerName);
-    highscores[0].score = playerScore;
-  }
+  // If a valid position was found, update highscores
+  if (insertPosition != -1) {
+    // Shift down highscores below the insertion position
+    for (int i = maxHighscores - 1; i > insertPosition; i--) {
+      highscores[i] = highscores[i - 1];
+    }
 
-  EEPROM.put(EEPROM_HIGHSCORE_START_ADDR, highscores);
+    // Insert the new highscore
+    strcpy(highscores[insertPosition].name, playerName);
+    highscores[insertPosition].score = playerScore;
+
+    // Save the updated highscores to EEPROM
+    EEPROM.put(EEPROM_HIGHSCORE_START_ADDR, highscores);
+  }
 }
 
 void displayHighscores() {
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
 
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+  currentHighscoreIndex = max(0, min(currentHighscoreIndex, maxHighscores - 1));
+
+  JoystickDirection direction = determineJoystickMovement(xValue, yValue);
+
+  switch (direction) {
+    case RIGHT:
+      currentHighscoreIndex = min(currentHighscoreIndex + 1, maxHighscores - 1);
+      break;
+    case LEFT:
+      currentHighscoreIndex = max(currentHighscoreIndex - 1, 0);
+      break;
+    case DOWN:
+      changeGameState(MENU);
+  }
+
   lcd.clear();
-  for (int i = 0; i < maxHighscores; ++i) {
-    lcd.setCursor(0, i);
-    lcd.print(i + 1);
-    lcd.print(". ");
-    lcd.print(highscores[i].name);
-    lcd.print(" - ");
-    lcd.print(highscores[i].score);
+  lcd.setCursor(0, 0);
+  lcd.print("Highscores");
+  lcd.setCursor(0, 1);
+  lcd.print(currentHighscoreIndex + 1);
+  lcd.print(". ");
+  lcd.print(highscores[currentHighscoreIndex].name);
+  lcd.print(" - ");
+  lcd.print(highscores[currentHighscoreIndex].score);
+}
+
+void resetHighscores() {
+  lcd.clear();
+  lcd.print("Reset Highscores?");
+  lcd.setCursor(0, 1);
+  lcd.print("Press btn to conf");
+
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+  JoystickDirection direction = determineJoystickMovement(xValue, yValue);
+  // Check joystick button state
+  if (isJoystickButtonDebounced() && buttonState == LOW) {
+    for (int i = 0; i < maxHighscores; ++i) {
+      strcpy(highscores[i].name, "N/A");
+      highscores[i].score = 0;
+    }
+    EEPROM.put(EEPROM_HIGHSCORE_START_ADDR, highscores);
+    changeGameState(SETTINGS);
+  }
+
+  if (direction == DOWN) {
+    changeGameState(SETTINGS);
   }
 }
 
@@ -284,6 +340,9 @@ void handleMenu() {
       break;
     case HIGHSCORE:
       displayHighscores();
+      break;
+    case RESET_HIGHSCORES:
+      resetHighscores();
       break;
     case SETTINGS:
       adjustSettings();
@@ -343,6 +402,8 @@ void displaySettingsMenu(int selectedOption) {
     lcd.print("Matrix Brightness");
   } else if (selectedOption == 2) {
     lcd.print("Set Name");
+  } else if (selectedOption == 3) {
+    lcd.print("Reset Highscores");
   }
 }
 
@@ -352,9 +413,9 @@ void adjustSettings() {
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   if (direction == DOWN) {
-    selectedOption = (selectedOption + 1) % 3;
+    selectedOption = (selectedOption + 1) % 4;
   } else if (direction == UP) {
-    selectedOption = (selectedOption - 1 + 3) % 3;
+    selectedOption = (selectedOption - 1 + 4) % 4;
   } else if (direction == LEFT || direction == RIGHT) {
     changeGameState(MENU);
   }
@@ -368,6 +429,8 @@ void adjustSettings() {
       changeGameState(ADJUST_MATRIX_BRIGHTNESS);
     } else if (selectedOption == 2) {
       changeGameState(ADJUST_PLAYER_NAME);
+    } else if (selectedOption == 3) {
+      changeGameState(RESET_HIGHSCORES);
     }
   }
 }
@@ -655,9 +718,6 @@ void resetGame() {
 
 void startGame() {
   if (gameOver) {
-    // unsigned long endTime = millis();
-    // score = (endTime - gameStartTime) / 1000;
-    // updateHighscores(playerName, score);
     return;
   }
 
@@ -870,13 +930,6 @@ void defuseBomb() {
   specialBombActive = false;
   matrix[bombXPos][bombYPos] = 0;
   gameOver = true;
-
-  // for (int row = 0; row < matrixSize; row++) {
-  //   for (int col = 0; col < matrixSize; col++) {
-  //     lc.setLed(0, row, col, true);
-  //   }
-  // }
-  //updateMatrix();
   win = true;
   unsigned long endTime = millis();
   score = (gameDuration - (endTime - gameStartTime)) / 1000;
