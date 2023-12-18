@@ -13,13 +13,15 @@ const int buttonPin = 2;
 // LedControl initialization
 LedControl lc = LedControl(dinPin, clockPin, loadPin, 1);
 
+const int lcdBacklightPin = 3;
+
 // EEPROM addresses
 const int EEPROM_LCD_BRIGHTNESS_ADDR = 0;
 const int EEPROM_MATRIX_BRIGHTNESS_ADDR = 5;
 const int EEPROM_HIGHSCORE_START_ADDR = 100;
 
 // LCD and matrix brightness settings
-byte LCDBrightness;
+byte LCDBrightness = 10;
 byte matrixBrightness;
 
 // Player position and movement
@@ -124,7 +126,7 @@ bool onFirstScreen = true;
 JoystickDirection lastJoystickDirection = CENTERED;
 
 // Deadzone threshold for joystick
-const int joystickDeadZone = 200;  
+const int joystickDeadZone = 200;
 
 // Variables for Joystick Center Position
 int centerJoystickX;
@@ -158,7 +160,7 @@ bool win;
 
 void initializeEEPROM() {
   // Read the current values of LCD and Matrix brightness from EEPROM
-  //EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
+  EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
 
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
@@ -185,6 +187,8 @@ void setup() {
   turnOnMatrix();
 
   pinMode(buttonPin, INPUT_PULLUP);
+  pinMode(lcdBacklightPin, OUTPUT);
+  analogWrite(lcdBacklightPin, LCDBrightness);
   //Set Joystick Center Position
   centerJoystickX = analogRead(xPin);
   centerJoystickY = analogRead(yPin);
@@ -682,12 +686,15 @@ void adjustLCDBrightness() {
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
   if (direction == LEFT) {
-    LCDBrightness = max(LCDBrightness - 1, 150);
+    LCDBrightness = max(LCDBrightness - 1, 0);
     EEPROM.put(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   } else if (direction == RIGHT) {
     LCDBrightness = min(LCDBrightness + 1, 255);
     EEPROM.put(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
   }
+  EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
+
+  analogWrite(lcdBacklightPin, LCDBrightness);
 
   if (direction == DOWN || direction == UP) {
     changeGameState(SETTINGS);
@@ -746,25 +753,6 @@ void adjustPlayerName() {
     changeGameState(MENU);
   }
 }
-
-// void displayEndMessage(bool win) {
-// turnOnMatrix();
-//   //lcd.clear();
-//   lcd.print("              ");
-//   lcd.setCursor(0, 0);
-//   if (win) {
-//     lcd.print("Congratulations");
-//     lcd.setCursor(0, 1);
-//     lcd.print("YOU WIN!");
-//   } else {
-//     lcd.print("Game Over");
-//     lcd.setCursor(0, 1);
-//     lcd.print("FAIL");
-//   }
-//   delay(5000);  // Keep the message for 5 seconds
-
-//   changeGameState(MENU);  // Return to the main menu
-// }
 
 void displayEndMessage(bool win) {
 
