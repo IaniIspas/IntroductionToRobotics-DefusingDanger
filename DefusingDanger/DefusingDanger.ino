@@ -2,6 +2,7 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
+// Pin connections
 const int dinPin = 12;
 const int clockPin = 11;
 const int loadPin = 10;
@@ -9,29 +10,32 @@ const int xPin = A0;
 const int yPin = A1;
 const int buttonPin = 2;
 
+// LedControl initialization
 LedControl lc = LedControl(dinPin, clockPin, loadPin, 1);
 
-byte LCDBrightness = 150;
+// EEPROM addresses
 const int EEPROM_LCD_BRIGHTNESS_ADDR = 0;
 const int EEPROM_MATRIX_BRIGHTNESS_ADDR = 5;
-byte matrixBrightness = 2;
+const int EEPROM_HIGHSCORE_START_ADDR = 100;
+
+// LCD and matrix brightness settings
+byte LCDBrightness;
+byte matrixBrightness;
+
+// Player position and movement
 byte xPos = 1;
 byte yPos = 1;
 byte xLastPos = 0;
 byte yLastPos = 0;
-
-const int minThreshold = 200;
-const int maxThreshold = 600;
-
 const byte moveInterval = 100;
 unsigned long lastMoved = 0;
 
-const byte matrixSize = 16;
-
+// Player blinking settings
 const byte playerBlinkInterval = 2000;
 unsigned long lastPlayerBlinked = 0;
 bool playerOn = true;
 
+// Bomb position, timing, and blinking
 byte bombXPos = 0;
 byte bombYPos = 0;
 unsigned long bombPlantedTime = 0;
@@ -39,12 +43,17 @@ const byte bombBlinkInterval = 100;
 unsigned long lastBombBlinked = 0;
 bool bombPlanted = false;
 
+// Special bomb position, timing, and blinking
 byte specialBombXPos = 6;
 byte specialBombYPos = 6;
 const byte specialBombBlinkInterval = 100;
 unsigned long lastSpecialBombBlinked = 0;
 bool specialBombActive = true;
+unsigned long specialBombMoveInterval = 15000;  // 25 seconds
+unsigned long lastSpecialBombMoveTime = 0;
 
+// Game map matrix
+const byte matrixSize = 16;
 byte matrix[matrixSize][matrixSize] = {
   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 },
   { 4, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 4 },
@@ -64,60 +73,57 @@ byte matrix[matrixSize][matrixSize] = {
   { 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 }
 };
 
+// Button state and debouncing
 bool buttonState = HIGH;
 bool lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
-unsigned long debounceDelay = 50;
-
+const unsigned long debounceDelay = 50;
 unsigned long buttonPressStartTime = 0;
 bool buttonPressed = false;
 bool bombPlacementInitiated = false;
 bool bombDefusalInitiated = false;
 
-bool gameOver = false;
-
-const byte rs = 9;
-const byte en = 8;
-const byte d4 = 7;
-const byte d5 = 6;
-const byte d6 = 5;
-const byte d7 = 4;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-
-int centerJoystickX;
-int centerJoystickY;
-int joystickDeadZone = 200;
-
+// Enums
 enum JoystickDirection { UP,
                          DOWN,
                          LEFT,
                          RIGHT,
                          CENTERED };
+enum GameState { WELCOME,
+                 MENU,
+                 START_GAME,
+                 SETTINGS,
+                 ADJUST_LCD_BRIGHTNESS,
+                 ADJUST_MATRIX_BRIGHTNESS,
+                 ADJUST_PLAYER_NAME,
+                 ADJUST_DIFFICULTY,
+                 HIGHSCORE,
+                 RESET_HIGHSCORES,
+                 ABOUT,
+                 HOW_TO_PLAY,
+                 END_MESSAGE };
 
-enum GameState {
-  WELCOME,
-  MENU,
-  START_GAME,
-  SETTINGS,
-  ADJUST_LCD_BRIGHTNESS,
-  ADJUST_MATRIX_BRIGHTNESS,
-  ADJUST_PLAYER_NAME,
-  ADJUST_DIFFICULTY,
-  HIGHSCORE,
-  RESET_HIGHSCORES,
-  ABOUT,
-  END_MESSAGE
-};
-
+// Game state and settings
+bool gameOver = false;
 GameState gameState = WELCOME;
-
 int selectedOption = 0;
-int generated = 0;
 int score = 0;
 byte currentDifficulty = 0;
+const int nameLength = 8;
+char playerName[nameLength + 1] = "N/A   ";
+unsigned long gameStartTime;
+const unsigned long gameDuration = 60000;
+unsigned long introMessageStartTime;
+JoystickDirection lastJoystickDirection = CENTERED;
 
-const int nameLength = 8;                    // Maximum length of the name
-char playerName[nameLength + 1] = "N/A   ";  // Initialize with spaces
+// Constants for Joystick
+const int joystickDeadZone = 200;  // Deadzone threshold for joystick
+
+// Variables for Joystick Center Position
+int centerJoystickX;
+int centerJoystickY;
+
+// Highscore management
 
 struct Highscore {
   char name[nameLength + 1];
@@ -127,20 +133,114 @@ struct Highscore {
 };
 
 
-const int maxHighscores = 3;                  // Number of highscores to keep
-const int EEPROM_HIGHSCORE_START_ADDR = 100;  // Starting address for highscores in EEPROM
+const int maxHighscores = 3;
 int currentHighscoreIndex = 0;
-
 Highscore highscores[maxHighscores];
 
+// LCD display setup
+const byte rs = 9;
+const byte en = 8;
+const byte d4 = 7;
+const byte d5 = 6;
+const byte d6 = 5;
+const byte d7 = 4;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+// Player win state
 bool win;
-unsigned long gameStartTime;
-const unsigned long gameDuration = 60000;
-unsigned long introMessageStartTime;
 
-bool printed = false;
+bool staticContentNeedsUpdate = true;
 
-JoystickDirection lastJoystickDirection = CENTERED;
+
+void initializeEEPROM() {
+  // Read the current values of LCD and Matrix brightness from EEPROM
+  //EEPROM.get(EEPROM_LCD_BRIGHTNESS_ADDR, LCDBrightness);
+  EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
+
+  // Initialize highscores from EEPROM
+  highscoreInit();
+}
+
+void setup() {
+  //Initialize LCD
+  lcd.begin(16, 2);
+
+  //I need this for generate maps that are different
+  randomSeed(analogRead(0));
+
+  //Set intro message start time
+  introMessageStartTime = millis();
+  initializeEEPROM();
+  lc.shutdown(0, false);
+  lc.setIntensity(0, matrixBrightness);
+  lc.clearDisplay(0);
+
+  //Turn matrix ON
+  turnOnMatrix();
+
+  pinMode(buttonPin, INPUT_PULLUP);
+  //Set Joystick Center Position
+  centerJoystickX = analogRead(xPin);
+  centerJoystickY = analogRead(yPin);
+}
+
+void loop() {
+  handleMenu();
+}
+
+void handleMenu() {
+  switch (gameState) {
+    case WELCOME:
+      DisplayIntroMessage();
+      break;
+    case MENU:
+      menuOption();
+      break;
+    case START_GAME:
+      startGame();
+      break;
+    case HIGHSCORE:
+      displayHighscores();
+      break;
+    case RESET_HIGHSCORES:
+      resetHighscores();
+      break;
+    case SETTINGS:
+      adjustSettings();
+      break;
+    case ADJUST_DIFFICULTY:
+      adjustDifficulty();
+      break;
+    case ADJUST_LCD_BRIGHTNESS:
+      adjustLCDBrightness();
+      break;
+    case ADJUST_MATRIX_BRIGHTNESS:
+      adjustMatrixBrightness();
+      break;
+    case ADJUST_PLAYER_NAME:
+      adjustPlayerName();
+      break;
+    case ABOUT:
+      displayAbout();
+      break;
+    case HOW_TO_PLAY:
+      displayHowToPlay();
+      break;
+    case END_MESSAGE:
+      displayEndMessage(win);
+    default:
+      break;
+  }
+}
+
+void turnOnMatrix() {
+  for (int row = 0; row < matrixSize; row++) {
+    for (int col = 0; col < matrixSize; col++) {
+      lc.setLed(0, row, col, true);
+    }
+  }
+}
+
 
 JoystickDirection determineJoystickMovement(int x, int y) {
   bool inDeadZone = abs(x - centerJoystickX) < joystickDeadZone && abs(y - centerJoystickY) < joystickDeadZone;
@@ -183,28 +283,92 @@ bool isJoystickButtonDebounced() {
   return buttonStateChanged;
 }
 
-void setup() {
-  Serial.begin(9600);
+void changeGameState(GameState newGameState) {
+  lcd.setCursor(0, 0);
+  lcd.clear();
+  lcd.setCursor(0, 1);
+  lcd.clear();
+  gameState = newGameState;
+}
 
-  lcd.begin(16, 2);
 
-  introMessageStartTime = millis();
-  //I need this for generate maps that are different
-  randomSeed(analogRead(0));
+void DisplayIntroMessage() {
+  int currentTime = millis();
 
-  lc.shutdown(0, false);
-  EEPROM.get(EEPROM_MATRIX_BRIGHTNESS_ADDR, matrixBrightness);
-  lc.setIntensity(0, matrixBrightness);
-  lc.clearDisplay(0);
+  if (currentTime - introMessageStartTime < 5000) {
+    lcd.setCursor(0, 0);
+    lcd.print("Welcome to");
+    lcd.setCursor(0, 1);
+    lcd.print("Defusing Danger");
+  } else {
+    changeGameState(MENU);
+  }
+}
 
-  pinMode(buttonPin, INPUT_PULLUP);
+void menuOption() {
+  lcd.setCursor(0, 0);
+  lcd.print("                ");
+  lcd.setCursor(0, 0);
+  lcd.print("MENU");
 
-  initMatrix();
+  int xValue = analogRead(xPin);
+  int yValue = analogRead(yPin);
+  JoystickDirection direction = determineJoystickMovement(xValue, yValue);
 
-  highscoreInit();
 
-  centerJoystickX = analogRead(xPin);
-  centerJoystickY = analogRead(yPin);
+  if (direction == DOWN) {
+    selectedOption = (selectedOption + 1) % 6;
+  } else if (direction == UP) {
+    selectedOption = (selectedOption - 1 + 5) % 6;
+  }
+
+  lcd.setCursor(0, 1);
+  lcd.print("                ");
+  lcd.setCursor(0, 1);
+
+  if (selectedOption == 0) {
+    lcd.print("Start Game");
+  } else if (selectedOption == 1) {
+    lcd.print("Settings");
+  } else if (selectedOption == 2) {
+    lcd.print("About");
+  } else if (selectedOption == 3) {
+    lcd.print("Highscore");
+  } else if (selectedOption == 4) {
+    lcd.print("Difficulty");
+  } else if (selectedOption == 5) {
+    lcd.print("How to play");
+  }
+
+  if (isJoystickButtonDebounced()) {
+    if (buttonState == LOW) {
+      if (selectedOption == 0) {
+        resetGame();
+        lcd.clear();
+        changeGameState(START_GAME);
+      } else if (selectedOption == 1) {
+        lcd.clear();
+        selectedOption = 0;
+        changeGameState(SETTINGS);
+      } else if (selectedOption == 2) {
+        lcd.clear();
+        selectedOption = 0;
+        changeGameState(ABOUT);
+      } else if (selectedOption == 3) {
+        lcd.clear();
+        selectedOption = 0;
+        changeGameState(HIGHSCORE);
+      } else if (selectedOption == 4) {
+        lcd.clear();
+        selectedOption = 0;
+        changeGameState(ADJUST_DIFFICULTY);
+        selectedOption = 0;
+      } else if (selectedOption == 5) {
+        gameState = HOW_TO_PLAY;
+      }
+    }
+  }
+  // gameStartTime = millis();
 }
 
 void highscoreInit() {
@@ -231,15 +395,11 @@ void swap(Highscore& a, Highscore& b) {
 }
 
 void updateHighscores(const char* playerName, unsigned long playerScore) {
-  Serial.print(playerName);
   EEPROM.get(EEPROM_HIGHSCORE_START_ADDR, highscores);
 
-  int insertPosition = -1;  // Position where new highscore should be inserted
+  // Position where new highscore should be inserted
+  int insertPosition = -1;
 
-
-  if (playerName[0] == " ")
-    strcpy(playerName, "N/A");
-  Serial.print(playerName);
   // Find the position to insert the new highscore
   for (int i = 0; i < maxHighscores; i++) {
     if (playerScore > highscores[i].score) {
@@ -269,6 +429,7 @@ void displayHighscores() {
 
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
+
   currentHighscoreIndex = max(0, min(currentHighscoreIndex, maxHighscores - 1));
 
   JoystickDirection direction = determineJoystickMovement(xValue, yValue);
@@ -284,14 +445,15 @@ void displayHighscores() {
       changeGameState(MENU);
   }
 
-  lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Highscores");
   lcd.setCursor(0, 1);
+  lcd.print("                ");
+  lcd.setCursor(0, 1);
   lcd.print(currentHighscoreIndex + 1);
-  lcd.print(". ");
+  lcd.print(".");
   lcd.print(highscores[currentHighscoreIndex].name);
-  lcd.print(" - ");
+  lcd.print("-");
   lcd.print(highscores[currentHighscoreIndex].score);
 }
 
@@ -316,77 +478,6 @@ void resetHighscores() {
 
   if (direction == DOWN) {
     changeGameState(SETTINGS);
-  }
-}
-
-void loop() {
-  handleMenu();
-}
-
-void handleMenu() {
-  switch (gameState) {
-    case WELCOME:
-      DisplayIntroMessage();
-      break;
-    case MENU:
-      menuOption();
-      break;
-    case START_GAME:
-      if (!generated) {
-        generateMap();
-        generated = 1;
-      }
-      startGame();
-      break;
-    case HIGHSCORE:
-      displayHighscores();
-      break;
-    case RESET_HIGHSCORES:
-      resetHighscores();
-      break;
-    case SETTINGS:
-      adjustSettings();
-      break;
-    case ADJUST_DIFFICULTY:
-      adjustDifficulty();
-      break;
-    case ADJUST_LCD_BRIGHTNESS:
-      adjustLCDBrightness();
-      break;
-    case ADJUST_MATRIX_BRIGHTNESS:
-      adjustMatrixBrightness();
-      break;
-    case ADJUST_PLAYER_NAME:
-      adjustPlayerName();
-      break;
-    case ABOUT:
-      displayAbout();
-      break;
-    case END_MESSAGE:
-      displayEndMessage(win);
-    default:
-      break;
-  }
-}
-
-void changeGameState(GameState newGameState) {
-  lcd.setCursor(0, 0);
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.clear();
-  gameState = newGameState;
-}
-
-void DisplayIntroMessage() {
-  int currentTime = millis();
-
-  if (currentTime - introMessageStartTime < 5000) {
-    lcd.setCursor(0, 0);
-    lcd.print("Welcome to");
-    lcd.setCursor(0, 1);
-    lcd.print("Defusing Danger");
-  } else {
-    changeGameState(MENU);
   }
 }
 
@@ -437,7 +528,7 @@ void adjustSettings() {
 
 void adjustDifficulty() {
   lcd.setCursor(0, 0);
-  lcd.print("Difficulty:    ");
+  lcd.print("Difficulty : ");
   lcd.setCursor(0, 1);
 
   int xValue = analogRead(xPin);
@@ -467,8 +558,6 @@ void adjustDifficulty() {
   }
 }
 
-
-
 void displayAbout() {
   const char* aboutTextDown[] = {
     "DefusingDanger",
@@ -493,15 +582,40 @@ void displayAbout() {
 
     delay(2000);
   }
-
   changeGameState(MENU);
 }
 
+void displayHowToPlay() {
+  static int page = 0;  // Keeps track of the instruction page
 
-void initMatrix() {
-  for (int row = 0; row < matrixSize; row++) {
-    for (int col = 0; col < matrixSize; col++) {
-      lc.setLed(0, row, col, true);
+  lcd.print("                ");
+  lcd.setCursor(0, 0);
+
+  switch (page) {
+    case 0:
+      lcd.print("Goal:");
+      lcd.setCursor(0, 1);
+      lcd.print("Defuse bomb");
+      break;
+    case 1:
+      lcd.print("Find blinking");
+      lcd.setCursor(0, 1);
+      lcd.print("special bomb");
+      break;
+    case 2:
+      lcd.print("Go next to it");
+      lcd.setCursor(0, 1);
+      lcd.print("& press button");
+      break;
+      // Add more cases if you have additional instructions
+  }
+
+  // Logic to change page on button press
+  if (isJoystickButtonDebounced() && buttonState == LOW) {
+    page++;
+    if (page > 2) {  // Adjust this number based on the total number of pages
+      page = 0;
+      changeGameState(MENU);  // Return to menu after the last page
     }
   }
 }
@@ -529,7 +643,8 @@ void adjustMatrixBrightness() {
     lcd.clear();
     changeGameState(SETTINGS);
   }
-  lcd.clear();
+  //lcd.clear();
+  lcd.print("                ");
 }
 
 void adjustLCDBrightness() {
@@ -552,12 +667,13 @@ void adjustLCDBrightness() {
   if (direction == DOWN || direction == UP) {
     changeGameState(SETTINGS);
   }
-  lcd.clear();
+  //lcd.clear();
+  lcd.print("                ");
 }
 
 void adjustPlayerName() {
-  static int charPosition = 0;    // Current character position in the name
-  static char currentChar = 'A';  // Current character being edited
+  static int charPosition = 0;
+  static char currentChar = 'A';
 
   int xValue = analogRead(xPin);
   int yValue = analogRead(yPin);
@@ -572,11 +688,9 @@ void adjustPlayerName() {
     else currentChar--;
   }
 
-  // Display the current name and character being edited
-  //lcd.clear();
   lcd.print("                ");  // Clear the second line of the LCD
   lcd.setCursor(0, 0);
-  //lcd.print("Name: ");
+  lcd.print("Name: ");
   for (int i = 0; i < charPosition; i++) {
     lcd.print(playerName[i]);
   }
@@ -608,71 +722,8 @@ void adjustPlayerName() {
   }
 }
 
-
-void menuOption() {
-  lcd.setCursor(0, 0);
-  lcd.print("                ");
-  lcd.setCursor(0, 0);
-  lcd.print("MENU");
-
-  int xValue = analogRead(xPin);
-  int yValue = analogRead(yPin);
-  JoystickDirection direction = determineJoystickMovement(xValue, yValue);
-
-
-  if (direction == DOWN) {
-    selectedOption = (selectedOption + 1) % 5;
-  } else if (direction == UP) {
-    selectedOption = (selectedOption - 1 + 5) % 5;
-  }
-
-  lcd.setCursor(0, 1);
-  lcd.print("                ");  // Clear the second line of the LCD
-  lcd.setCursor(0, 1);
-
-  if (selectedOption == 0) {
-    lcd.print("Start Game");
-  } else if (selectedOption == 1) {
-    lcd.print("Settings");
-  } else if (selectedOption == 2) {
-    lcd.print("About");
-  } else if (selectedOption == 3) {
-    lcd.print("Highscore");
-  } else if (selectedOption == 4) {
-    lcd.print("Difficulty:    ");
-  }
-
-  if (isJoystickButtonDebounced()) {
-    if (buttonState == LOW) {
-      if (selectedOption == 0) {
-        resetGame();
-        lcd.clear();
-        changeGameState(START_GAME);
-      } else if (selectedOption == 1) {
-        lcd.clear();
-        selectedOption = 0;
-        changeGameState(SETTINGS);
-      } else if (selectedOption == 2) {
-        lcd.clear();
-        selectedOption = 0;
-        changeGameState(ABOUT);
-      } else if (selectedOption == 3) {
-        lcd.clear();
-        selectedOption = 0;
-        changeGameState(HIGHSCORE);
-      } else if (selectedOption == 4) {
-        lcd.clear();
-        selectedOption = 0;
-        changeGameState(ADJUST_DIFFICULTY);
-        selectedOption = 0;
-      }
-    }
-  }
-  gameStartTime = millis();
-}
-
 void displayEndMessage(bool win) {
-  initMatrix();
+  turnOnMatrix();
   lcd.clear();
   lcd.setCursor(0, 0);
   if (win) {
@@ -685,7 +736,6 @@ void displayEndMessage(bool win) {
     lcd.print("FAIL");
   }
 
-  delay(5000);            // Display the message for 5 seconds
   changeGameState(MENU);  // Return to the main menu
 }
 
@@ -693,7 +743,6 @@ void displayEndMessage(bool win) {
 void resetGame() {
   gameOver = false;
   win = false;
-  generated = 0;
   score = 0;
   xPos = 1;
   yPos = 1;
@@ -701,7 +750,11 @@ void resetGame() {
   yLastPos = 0;
   bombPlanted = false;
   specialBombActive = true;
-  gameStartTime = millis();  // Reset the game start time
+  specialBombXPos = 6;
+  specialBombYPos = 6;
+  gameStartTime = millis();
+  lastSpecialBombMoveTime = 0;
+  lastSpecialBombMoveTime = millis();
 
   for (int row = 0; row < matrixSize; row++) {
     for (int col = 0; col < matrixSize; col++) {
@@ -714,19 +767,17 @@ void resetGame() {
       }
     }
   }
+  generateMap();
 }
 
 void startGame() {
-  if (gameOver) {
-    return;
-  }
-
   updateGameDisplay();
   handlePlayerBlinking();
   handlePlayerMovement();
   handleSpecialBombBlinking();
   handleButtonInteractions();
   handleBombBlinking();
+  handleSpecialBombMovement();
   handleBombExplosion();
 }
 
@@ -735,7 +786,8 @@ void updateGameDisplay() {
   unsigned long elapsedTime = currentTime - gameStartTime;
   unsigned long remainingTime = (gameDuration > elapsedTime) ? (gameDuration - elapsedTime) : 0;
   if (!bombDefusalInitiated) {
-    lcd.clear();
+    //lcd.clear();
+    lcd.print("        ");
     lcd.setCursor(0, 0);
     lcd.print("Name: ");
     lcd.print(playerName);
@@ -780,19 +832,23 @@ void handleButtonInteractions() {
   if (isJoystickButtonDebounced()) {
     if (buttonState == LOW) {
       buttonPressStartTime = millis();
-      bombPlacementInitiated = true;
-
-      if ((xPos == bombXPos && yPos == bombYPos) || (xPos == specialBombXPos && yPos == specialBombYPos)) {
+      // Check if player is adjacent to the special bomb's position to initiate defusing
+      if ((abs(xPos - specialBombXPos) <= 1 && yPos == specialBombYPos) || (abs(yPos - specialBombYPos) <= 1 && xPos == specialBombXPos)) {
         bombDefusalInitiated = true;
+      } else {
+        // Else, initiate bomb placement if not already defusing a bomb
+        bombPlacementInitiated = !bombDefusalInitiated;
       }
     } else {
-      if (!bombDefusalInitiated && bombPlacementInitiated) {
+      if (bombPlacementInitiated && !bombDefusalInitiated) {
         placeBomb();
       }
       bombPlacementInitiated = false;
+      bombDefusalInitiated = false;
     }
   }
 }
+
 
 void handleBombBlinking() {
   if (bombPlanted && millis() - lastBombBlinked > bombBlinkInterval) {
@@ -812,7 +868,7 @@ void showDefusingCountdown() {
   unsigned long buttonPressDuration = millis() - buttonPressStartTime;
   unsigned long timeRemaining = 5000 - buttonPressDuration;
 
-  lcd.clear();
+  lcd.print("        ");
   lcd.setCursor(0, 0);
   lcd.print("Defusing: ");
   lcd.print(timeRemaining / 1000);
@@ -893,7 +949,7 @@ void updatePositions() {
   }
 
   // Check if the new position is a wall or door
-  if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4) {
+  if (matrix[newXPos][newYPos] != 3 && matrix[newXPos][newYPos] != 4 && !(newXPos == specialBombXPos && newYPos == specialBombYPos)) {
     xPos = newXPos;
     yPos = newYPos;
   }
@@ -905,7 +961,6 @@ void updatePositions() {
     matrix[xPos][yPos] = 1;
   }
 }
-
 
 void placeBomb() {
   bombXPos = xPos;
@@ -937,13 +992,22 @@ void defuseBomb() {
   changeGameState(END_MESSAGE);
 }
 
+void moveSpecialBomb() {
+  byte newSpecialBombX, newSpecialBombY;
+  do {
+    newSpecialBombX = random(1, matrixSize - 1);
+    newSpecialBombY = random(1, matrixSize - 1);
+  } while (matrix[newSpecialBombX][newSpecialBombY] != 0);  // Ensure the new position is empty
 
-void printMatrix() {
-  for (int i = 0; i < matrixSize; i++) {
-    for (int j = 0; j < matrixSize; j++) {
-      (matrix[i][j]);
-      Serial.print(" ");
-    }
-    Serial.println();
+  // Update the position of the special bomb
+  specialBombXPos = newSpecialBombX;
+  specialBombYPos = newSpecialBombY;
+
+  lastSpecialBombMoveTime = millis();
+}
+
+void handleSpecialBombMovement() {
+  if (millis() - lastSpecialBombMoveTime > specialBombMoveInterval) {
+    moveSpecialBomb();
   }
 }
